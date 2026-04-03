@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Magic Music Show</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #000;
+  overflow: hidden;
+  font-family: 'Comic Sans MS', 'Chalkboard SE', cursive;
+  user-select: none;
+}
+
+#webcam {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+#effects-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* YouTube player hidden off-screen */
+#yt-wrap {
+  position: fixed;
+  left: -9999px;
+  bottom: -9999px;
+  width: 1px;
+  height: 1px;
+  visibility: hidden;
+}
+
+/* Now playing banner */
+#now-playing {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  padding: 10px 28px;
+  border-radius: 40px;
+  font-size: 22px;
+  z-index: 100;
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+  display: none;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+}
+
+/* Hand status hint */
+#hint {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.35);
+  color: rgba(255,255,255,0.8);
+  padding: 6px 20px;
+  border-radius: 20px;
+  font-size: 15px;
+  z-index: 100;
+  backdrop-filter: blur(4px);
+  transition: opacity 0.4s;
+}
+
+/* Song picker */
+#song-picker {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 14px;
+  z-index: 100;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 0 16px;
+}
+
+.song-btn {
+  padding: 14px 24px;
+  border: none;
+  border-radius: 50px;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 0.18s, box-shadow 0.18s;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.45);
+  letter-spacing: 0.3px;
+}
+.song-btn:hover { transform: scale(1.08); }
+.song-btn.playing {
+  transform: scale(1.12);
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 4px 18px rgba(0,0,0,0.45); }
+  50% { box-shadow: 0 0 40px 10px var(--glow); }
+}
+
+.btn-golden {
+  background: linear-gradient(135deg, #FFD700, #FF8C00);
+  color: #4a2800;
+  --glow: rgba(255, 200, 0, 0.7);
+}
+.btn-soda {
+  background: linear-gradient(135deg, #FF6EC7, #9B4FE8);
+  color: #fff;
+  --glow: rgba(180, 79, 255, 0.7);
+}
+.btn-letitgo {
+  background: linear-gradient(135deg, #A8EDFF, #3B8FD4);
+  color: #002244;
+  --glow: rgba(60, 150, 220, 0.7);
+}
+.btn-snowman {
+  background: linear-gradient(135deg, #E0F7FF, #7EC8E3);
+  color: #003355;
+  --glow: rgba(126, 200, 227, 0.7);
+}
+
+/* Pause/play button */
+#pp-btn {
+  position: fixed;
+  top: 20px;
+  right: 76px;
+  z-index: 100;
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  font-size: 22px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background 0.2s, transform 0.15s;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+#pp-btn:hover { background: rgba(0,0,0,0.65); transform: scale(1.1); }
+
+/* Fullscreen button */
+#fs-btn {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 100;
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  font-size: 22px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: background 0.2s, transform 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#fs-btn:hover { background: rgba(0,0,0,0.65); transform: scale(1.1); }
+</style>
+</head>
+<body>
+
+<video id="webcam" autoplay playsinline muted></video>
+<canvas id="effects-canvas"></canvas>
+
+<div id="yt-wrap"><div id="yt-player"></div></div>
+
+<button id="pp-btn" title="Pause">⏸</button>
+<button id="fs-btn" title="Fullscreen">⛶</button>
+
+<div id="now-playing">🎵 <span id="np-text"></span></div>
+<div id="hint">Loading camera…</div>
+
+<div id="song-picker">
+  <button class="song-btn btn-golden"  data-id="btouk-6irm4" data-name="Golden"                     data-theme="golden">✨ Golden</button>
+  <button class="song-btn btn-soda"    data-id="983bBbJx0Mk" data-name="Soda Pop"                   data-theme="soda">🫧 Soda Pop</button>
+  <button class="song-btn btn-letitgo" data-id="moSFlvxnbgk" data-name="Let It Go"                  data-theme="frozen">❄️ Let It Go</button>
+  <button class="song-btn btn-snowman" data-id="TeQ_TTyLGMs" data-name="Do You Want to Build a Snowman?" data-theme="snowman">⛄ Build a Snowman</button>
+</div>
+
+<!-- YouTube IFrame API -->
+<script src="https://www.youtube.com/iframe_api"></script>
+
+<!-- MediaPipe Hands -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script>
+// ─── Canvas ────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('effects-canvas');
+const ctx    = canvas.getContext('2d');
+
+function resizeCanvas() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// ─── Themes ────────────────────────────────────────────────────────────────
+const THEMES = {
+  golden: {
+    colors: ['#FFD700','#FFA500','#FFE566','#FF8C00','#FFFACD','#FFB347'],
+    shapes: ['star','heart','sparkle','star'],
+    bgGlow: 'rgba(255, 190, 0, 0.10)',
+  },
+  soda: {
+    colors: ['#FF6EC7','#B44FFF','#00E5FF','#ADFF2F','#FF4081','#FFF200'],
+    shapes: ['bubble','sparkle','circle','bubble'],
+    bgGlow: 'rgba(180, 79, 255, 0.10)',
+  },
+  frozen: {
+    colors: ['#A8EDFF','#FFFFFF','#3B8FD4','#C8E8FF','#7EC8E3','#E0F7FF'],
+    shapes: ['snowflake','crystal','sparkle','snowflake'],
+    bgGlow: 'rgba(60, 140, 210, 0.12)',
+  },
+  snowman: {
+    colors: ['#FFFFFF','#E0F7FF','#7EC8E3','#FFD700','#FF8C00','#D4F1FF'],
+    shapes: ['snowflake','circle','sparkle','snowflake'],
+    bgGlow: 'rgba(126, 200, 227, 0.10)',
+  },
+};
+
+let currentTheme = 'golden';
+
+// ─── Particle class ────────────────────────────────────────────────────────
+class Particle {
+  constructor(x, y, theme) {
+    const t = THEMES[theme];
+    this.x    = x;
+    this.y    = y;
+    this.color = t.colors[Math.floor(Math.random() * t.colors.length)];
+    this.shape = t.shapes[Math.floor(Math.random() * t.shapes.length)];
+    this.size  = 10 + Math.random() * 24;
+    this.vx    = (Math.random() - 0.5) * 6;
+    this.vy    = -1.5 - Math.random() * 5;
+    this.alpha = 1;
+    this.decay = 0.012 + Math.random() * 0.018;
+    this.rot   = Math.random() * Math.PI * 2;
+    this.rotV  = (Math.random() - 0.5) * 0.18;
+    this.grav  = 0.06 + Math.random() * 0.05;
+  }
+
+  update() {
+    this.x   += this.vx;
+    this.vy  += this.grav;
+    this.y   += this.vy;
+    this.alpha -= this.decay;
+    this.rot  += this.rotV;
+  }
+
+  draw(c) {
+    if (this.alpha <= 0) return;
+    c.save();
+    c.globalAlpha = this.alpha;
+    c.translate(this.x, this.y);
+    c.rotate(this.rot);
+    c.fillStyle   = this.color;
+    c.strokeStyle = this.color;
+
+    switch (this.shape) {
+      case 'star':      drawStar(c, this.size);      break;
+      case 'heart':     drawHeart(c, this.size);     break;
+      case 'sparkle':   drawSparkle(c, this.size);   break;
+      case 'circle':
+        c.beginPath();
+        c.arc(0, 0, this.size * 0.45, 0, Math.PI * 2);
+        c.fill();
+        break;
+      case 'bubble':
+        c.beginPath();
+        c.arc(0, 0, this.size * 0.45, 0, Math.PI * 2);
+        c.globalAlpha = this.alpha * 0.35;
+        c.fill();
+        c.globalAlpha = this.alpha;
+        c.lineWidth = 2;
+        c.stroke();
+        break;
+      case 'snowflake': drawSnowflake(c, this.size); break;
+      case 'crystal':   drawCrystal(c, this.size);   break;
+    }
+    c.restore();
+  }
+}
+
+// ─── Shape helpers ─────────────────────────────────────────────────────────
+function drawStar(c, size) {
+  const outerR = size * 0.5, innerR = size * 0.2, spikes = 5;
+  let rot = -Math.PI / 2;
+  const step = Math.PI / spikes;
+  c.beginPath();
+  c.moveTo(Math.cos(rot) * outerR, Math.sin(rot) * outerR);
+  for (let i = 0; i < spikes; i++) {
+    rot += step;
+    c.lineTo(Math.cos(rot) * innerR, Math.sin(rot) * innerR);
+    rot += step;
+    c.lineTo(Math.cos(rot) * outerR, Math.sin(rot) * outerR);
+  }
+  c.closePath();
+  c.fill();
+}
+
+function drawHeart(c, size) {
+  const s = size * 0.38;
+  c.beginPath();
+  c.moveTo(0, s * 0.4);
+  c.bezierCurveTo(0, 0, -s, 0, -s, -s * 0.5);
+  c.bezierCurveTo(-s, -s * 1.2, 0, -s * 1.1, 0, -s * 0.4);
+  c.bezierCurveTo(0, -s * 1.1, s, -s * 1.2, s, -s * 0.5);
+  c.bezierCurveTo(s, 0, 0, 0, 0, s * 0.4);
+  c.fill();
+}
+
+function drawSparkle(c, size) {
+  const s = size * 0.5;
+  c.lineWidth = 2.5;
+  for (let i = 0; i < 4; i++) {
+    const a = (i * Math.PI) / 2;
+    c.beginPath();
+    c.moveTo(0, 0);
+    c.lineTo(Math.cos(a) * s, Math.sin(a) * s);
+    c.stroke();
+  }
+  for (let i = 0; i < 4; i++) {
+    const a = (i * Math.PI) / 2 + Math.PI / 4;
+    c.beginPath();
+    c.moveTo(0, 0);
+    c.lineTo(Math.cos(a) * s * 0.55, Math.sin(a) * s * 0.55);
+    c.stroke();
+  }
+  c.beginPath();
+  c.arc(0, 0, s * 0.18, 0, Math.PI * 2);
+  c.fill();
+}
+
+function drawSnowflake(c, size) {
+  const s = size * 0.5;
+  c.lineWidth = 2;
+  for (let i = 0; i < 6; i++) {
+    const a = (i * Math.PI) / 3;
+    c.beginPath();
+    c.moveTo(0, 0);
+    c.lineTo(Math.cos(a) * s, Math.sin(a) * s);
+    c.stroke();
+    // branch arms
+    for (const t of [0.55, 0.75]) {
+      const bx = Math.cos(a) * s * t;
+      const by = Math.sin(a) * s * t;
+      for (const sign of [-1, 1]) {
+        const ba = a + sign * Math.PI / 3;
+        c.beginPath();
+        c.moveTo(bx, by);
+        c.lineTo(bx + Math.cos(ba) * s * 0.28, by + Math.sin(ba) * s * 0.28);
+        c.stroke();
+      }
+    }
+  }
+  c.beginPath();
+  c.arc(0, 0, s * 0.15, 0, Math.PI * 2);
+  c.fill();
+}
+
+function drawCrystal(c, size) {
+  const s = size * 0.5;
+  c.beginPath();
+  c.moveTo(0, -s);
+  c.lineTo(s * 0.45, 0);
+  c.lineTo(0, s);
+  c.lineTo(-s * 0.45, 0);
+  c.closePath();
+  c.globalAlpha *= 0.5;
+  c.fill();
+  c.globalAlpha /= 0.5;
+  c.lineWidth = 1.5;
+  c.stroke();
+}
+
+// ─── Hand tracking ─────────────────────────────────────────────────────────
+let handLandmarks = [];
+const webcam  = document.getElementById('webcam');
+const hintEl  = document.getElementById('hint');
+
+const handDetector = new Hands({
+  locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
+
+handDetector.setOptions({
+  maxNumHands: 2,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.5,
+});
+
+handDetector.onResults(results => {
+  handLandmarks = results.multiHandLandmarks || [];
+  if (handLandmarks.length === 0)     hintEl.textContent = 'Move your hands! ✋';
+  else if (handLandmarks.length === 1) hintEl.textContent = '1 hand detected ✋';
+  else                                 hintEl.textContent = '2 hands detected ✋✋';
+});
+
+const cam = new Camera(webcam, {
+  onFrame: async () => { await handDetector.send({ image: webcam }); },
+  width: 1280,
+  height: 720,
+});
+
+cam.start()
+  .then(() => { hintEl.textContent = 'Move your hands! ✋'; })
+  .catch(err => { hintEl.textContent = 'Camera error — please allow camera access.'; });
+
+// ─── Particles ─────────────────────────────────────────────────────────────
+let particles = [];
+
+// Fingertip landmark indices (thumb, index, middle, ring, pinky)
+const TIPS = [4, 8, 12, 16, 20];
+
+function spawnFromHands() {
+  for (const lms of handLandmarks) {
+    for (const idx of TIPS) {
+      const lm = lms[idx];
+      if (!lm) continue;
+      const x = (1 - lm.x) * canvas.width;  // mirror to match video
+      const y = lm.y * canvas.height;
+      // Index finger tip gets more sparkle
+      const count = idx === 8 ? 4 : 2;
+      for (let i = 0; i < count; i++) {
+        particles.push(new Particle(
+          x + (Math.random() - 0.5) * 18,
+          y + (Math.random() - 0.5) * 18,
+          currentTheme
+        ));
+      }
+    }
+  }
+}
+
+// ─── Animation loop ────────────────────────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Subtle themed tint when hands detected
+  if (handLandmarks.length > 0) {
+    ctx.fillStyle = THEMES[currentTheme].bgGlow;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  spawnFromHands();
+
+  particles = particles.filter(p => p.alpha > 0);
+  if (particles.length > 900) particles.splice(0, particles.length - 900);
+  for (const p of particles) { p.update(); p.draw(ctx); }
+}
+
+animate();
+
+// ─── YouTube player ─────────────────────────────────────────────────────────
+let ytPlayer      = null;
+let currentVideoId = null;
+
+window.onYouTubeIframeAPIReady = () => {
+  ytPlayer = new YT.Player('yt-player', {
+    height: '1', width: '1',
+    videoId: '',
+    playerVars: { autoplay: 0, controls: 0, modestbranding: 1 },
+    events: {
+      onStateChange(e) {
+        if (e.data === YT.PlayerState.ENDED) stopPlaying();
+      }
+    }
+  });
+};
+
+const ppBtn = document.getElementById('pp-btn');
+
+function setPpVisible(visible) {
+  ppBtn.style.display = visible ? 'flex' : 'none';
+}
+
+ppBtn.addEventListener('click', () => {
+  if (!ytPlayer) return;
+  const state = ytPlayer.getPlayerState();
+  if (state === YT.PlayerState.PLAYING) {
+    ytPlayer.pauseVideo();
+    ppBtn.textContent = '▶';
+    ppBtn.title = 'Play';
+    document.querySelectorAll('.song-btn').forEach(b => b.classList.remove('playing'));
+  } else {
+    ytPlayer.playVideo();
+    ppBtn.textContent = '⏸';
+    ppBtn.title = 'Pause';
+    document.querySelectorAll('.song-btn').forEach(b => {
+      if (b.dataset.id === currentVideoId) b.classList.add('playing');
+    });
+  }
+});
+
+function stopPlaying() {
+  document.querySelectorAll('.song-btn').forEach(b => b.classList.remove('playing'));
+  document.getElementById('now-playing').style.display = 'none';
+  setPpVisible(false);
+  currentVideoId = null;
+}
+
+// ─── Fullscreen ─────────────────────────────────────────────────────────────
+const fsBtn = document.getElementById('fs-btn');
+
+function updateFsIcon() {
+  fsBtn.textContent = document.fullscreenElement ? '✕' : '⛶';
+  fsBtn.title = document.fullscreenElement ? 'Exit fullscreen' : 'Fullscreen';
+}
+
+fsBtn.addEventListener('click', () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen().catch(() => {});
+  }
+});
+
+document.addEventListener('fullscreenchange', updateFsIcon);
+
+// ─── Song buttons ───────────────────────────────────────────────────────────
+document.querySelectorAll('.song-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const { id: videoId, name, theme } = btn.dataset;
+
+    // Tap again to stop
+    if (currentVideoId === videoId) {
+      ytPlayer?.stopVideo();
+      stopPlaying();
+      return;
+    }
+
+    currentTheme   = theme;
+    currentVideoId = videoId;
+
+    document.querySelectorAll('.song-btn').forEach(b => b.classList.remove('playing'));
+    btn.classList.add('playing');
+
+    document.getElementById('np-text').textContent = name;
+    document.getElementById('now-playing').style.display = 'block';
+
+    ppBtn.textContent = '⏸';
+    ppBtn.title = 'Pause';
+    setPpVisible(true);
+
+    // Clear old particles when switching songs
+    particles = [];
+
+    if (ytPlayer?.loadVideoById) ytPlayer.loadVideoById(videoId);
+  });
+});
+</script>
+</body>
+</html>
